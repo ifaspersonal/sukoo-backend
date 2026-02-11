@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+
+# Virtual env
+venv/
+.env
+.env.*
+
+# MacOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Alembic cache
+alembic/__pycache__/
+
+# Logs
+*.log
+
+# Pytest
+.pytest_cache/
+
+# Migrations version (optional kalau tidak dipakai)
+# alembic/versions/

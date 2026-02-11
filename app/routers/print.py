@@ -1,0 +1,40 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session, joinedload
+
+from app.core.deps import get_db
+from app.models.transaction import Transaction
+from app.models.transaction_item import TransactionItem
+from app.services.receipt_service import build_receipt_preview
+
+router = APIRouter(prefix="/print", tags=["Print"])
+
+
+@router.post("/{transaction_id}")
+def print_receipt(transaction_id: int, db: Session = Depends(get_db)):
+    # 1️⃣ Ambil transaksi
+    tx = (
+        db.query(Transaction)
+        .filter(Transaction.id == transaction_id)
+        .first()
+    )
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # 2️⃣ Ambil item + product (untuk nama produk)
+    items = (
+        db.query(TransactionItem)
+        .options(joinedload(TransactionItem.product))
+        .filter(TransactionItem.transaction_id == tx.id)
+        .all()
+    )
+    if not items:
+        raise HTTPException(status_code=400, detail="Transaction has no items")
+
+    # 3️⃣ Build PREVIEW receipt (TANPA ESC/POS)
+    receipt_text = build_receipt_preview(tx, items)
+
+    # 4️⃣ Return ke frontend
+    return {
+        "printed": False,  # legacy flag, aman untuk dipertahankan
+        "receipt": receipt_text,
+    }
