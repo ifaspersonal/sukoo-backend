@@ -4,9 +4,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="SUKOO POS API")
 
+origins = [
+    "http://localhost:3000",
+    "https://sukoo-pos-frontend.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
