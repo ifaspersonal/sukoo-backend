@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from app.core.deps import get_db
 from app.models.transaction import Transaction
@@ -12,145 +12,113 @@ from app.core.security import get_current_user
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
-# =========================================
-# DATE RANGE HELPER
-# =========================================
-def get_date_range(period: str):
+@router.get("", dependencies=[Depends(get_current_user)])
+def sales_report(
+    period: str = Query("daily"),
+    start: str | None = None,
+    end: str | None = None,
+    db: Session = Depends(get_db)
+):
+
+    # ===============================
+    # DATE RANGE LOGIC
+    # ===============================
+
     today = date.today()
 
-    if period == "weekly":
-        start = today - timedelta(days=today.weekday())
-        end = start + timedelta(days=6)
-    elif period == "monthly":
-        start = today.replace(day=1)
-        if start.month == 12:
-            end = start.replace(year=start.year + 1, month=1, day=1) - timedelta(days=1)
+    if start and end:
+        start_date = datetime.strptime(start, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end, "%Y-%m-%d").date()
+    else:
+        if period == "weekly":
+            start_date = today - timedelta(days=6)
+            end_date = today
+        elif period == "monthly":
+            start_date = today.replace(day=1)
+            end_date = today
         else:
-            end = start.replace(month=start.month + 1, day=1) - timedelta(days=1)
-    else:  # default daily
-        start = today
-        end = today
+            start_date = today
+            end_date = today
 
-    return start, end
+    # ===============================
+    # BASE QUERY
+    # ===============================
 
-
-# =========================================
-# REPORT SUMMARY (DAILY / WEEKLY / MONTHLY)
-# =========================================
-@router.get("", dependencies=[Depends(get_current_user)])
-def report_summary(
-    period: str = Query("daily", enum=["daily", "weekly", "monthly"]),
-    db: Session = Depends(get_db),
-):
-    start, end = get_date_range(period)
-
-    base_filter = (
-        func.date(Transaction.created_at) >= start,
-        func.date(Transaction.created_at) <= end,
+    tx_query = db.query(Transaction).filter(
+        func.date(Transaction.created_at) >= start_date,
+        func.date(Transaction.created_at) <= end_date
     )
 
-    # ==============================
-    # TOTAL REVENUE
-    # ==============================
+    total_transactions = tx_query.count()
+
+    # ===============================
+    # REVENUE
+    # ===============================
+
     total_revenue = (
         db.query(func.sum(TransactionItem.subtotal))
         .join(Transaction)
-        .filter(*base_filter)
-        .scalar()
-        or 0
+        .filter(
+            func.date(Transaction.created_at) >= start_date,
+            func.date(Transaction.created_at) <= end_date
+        )
+        .scalar() or 0
     )
 
-    # ==============================
-    # TOTAL COST
-    # ==============================
     total_cost = (
         db.query(func.sum(TransactionItem.cost_price * TransactionItem.qty))
         .join(Transaction)
-        .filter(*base_filter)
-        .scalar()
-        or 0
-    )
-
-    total_transactions = (
-        db.query(Transaction)
-        .filter(*base_filter)
-        .count()
+        .filter(
+            func.date(Transaction.created_at) >= start_date,
+            func.date(Transaction.created_at) <= end_date
+        )
+        .scalar() or 0
     )
 
     profit = total_revenue - total_cost
 
-    # ==============================
+    # ===============================
     # PAYMENT BREAKDOWN
-    # ==============================
-    cash_total = (
-        db.query(func.sum(TransactionItem.subtotal))
-        .join(Transaction)
-        .filter(*base_filter, Transaction.payment_method == "cash")
-        .scalar()
-        or 0
-    )
+    # ===============================
 
-    qris_total = (
-        db.query(func.sum(TransactionItem.subtotal))
-        .join(Transaction)
-        .filter(*base_filter, Transaction.payment_method == "qris")
-        .scalar()
-        or 0
-    )
-
-    # ==============================
-    # TOP PRODUCTS
-    # ==============================
-    top_products = (
-        db.query(
-            Product.name,
-            func.sum(TransactionItem.qty).label("qty")
-        )
-        .join(TransactionItem)
-        .join(Transaction)
-        .filter(*base_filter)
-        .group_by(Product.name)
-        .order_by(func.sum(TransactionItem.qty).desc())
-        .limit(5)
-        .all()
-    )
-
-    # ==============================
-    # HOURLY SALES (ONLY DAILY)
-    # ==============================
-    hourly_sales = []
-
-    if period == "daily":
-        hourly = (
-            db.query(
-                func.extract("hour", Transaction.created_at).label("hour"),
-                func.sum(TransactionItem.subtotal).label("total")
+    def payment_total(method):
+        return (
+            db.query(func.sum(TransactionItem.subtotal))
+            .join(Transaction)
+            .filter(
+                func.date(Transaction.created_at) >= start_date,
+                func.date(Transaction.created_at) <= end_date,
+                Transaction.payment_method == method
             )
-            .join(TransactionItem)
-            .filter(*base_filter)
-            .group_by("hour")
-            .order_by("hour")
-            .all()
+            .scalar() or 0
         )
 
-        hourly_sales = [
-            {"hour": int(h.hour), "total": int(h.total)}
-            for h in hourly
-        ]
+    cash_total = payment_total("cash")
+    qris_total = payment_total("qris")
+
+    # ===============================
+    # TRANSACTION LIST (DETAIL VIEW)
+    # ===============================
+
+    transactions = tx_query.order_by(Transaction.created_at.desc()).all()
+
+    transaction_list = [
+        {
+            "id": tx.id,
+            "created_at": tx.created_at,
+            "payment_method": tx.payment_method,
+        }
+        for tx in transactions
+    ]
 
     return {
-        "period": period,
-        "start_date": str(start),
-        "end_date": str(end),
+        "start_date": str(start_date),
+        "end_date": str(end_date),
         "total_revenue": int(total_revenue),
         "total_cost": int(total_cost),
         "profit": int(profit),
         "total_transactions": total_transactions,
         "cash_total": int(cash_total),
         "qris_total": int(qris_total),
-        "top_products": [
-            {"name": p.name, "qty": int(p.qty)}
-            for p in top_products
-        ],
-        "hourly_sales": hourly_sales
+        "transactions": transaction_list,
     }
