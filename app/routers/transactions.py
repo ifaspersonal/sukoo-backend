@@ -16,8 +16,7 @@ def create_pos_transaction(
     user=Depends(get_current_user),
 ):
     try:
-        # 🔥 Semua business logic (stock + loyalty + history)
-        # sekarang hanya di service layer
+        # 🔥 Semua business logic di service layer
         tx = create_transaction(
             db=db,
             items=payload.items,
@@ -25,6 +24,7 @@ def create_pos_transaction(
             customer_phone=payload.customer_phone,
             customer_name=payload.customer_name,
             created_by=user.id,
+            redeem_points=payload.redeem_points or 0,  # ✅ NEW
         )
 
         return tx

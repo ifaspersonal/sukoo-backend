@@ -22,6 +22,7 @@ def create_transaction(
     customer_phone: str | None,
     customer_name: str | None,
     created_by: int,
+    redeem_points: int = 0,   # 🔥 NEW
 ):
     if not items:
         raise ValueError("Items cannot be empty")
@@ -39,6 +40,7 @@ def create_transaction(
         customer = (
             db.query(Customer)
             .filter(Customer.phone == customer_phone)
+            .with_for_update()
             .first()
         )
 
@@ -48,7 +50,7 @@ def create_transaction(
                 name=customer_name,
             )
             db.add(customer)
-            db.flush()  # get customer.id
+            db.flush()
 
     # ==============================
     # LOCK PRODUCTS
@@ -76,8 +78,7 @@ def create_transaction(
         subtotal = product.price * item.qty
         total_amount += subtotal
 
-        # 🎯 POINT RULE:
-        # 1 poin per qty
+        # 🎯 1 point per qty
         total_points += item.qty
 
         tx_items.append(
@@ -91,18 +92,51 @@ def create_transaction(
         )
 
     # ==============================
+    # 🔁 REDEEM LOGIC
+    # ==============================
+    if redeem_points and redeem_points > 0:
+
+        if not customer:
+            raise ValueError("Redeem requires customer")
+
+        if customer.points < redeem_points:
+            raise ValueError("Insufficient points")
+
+        # 1 point = Rp 1 (ubah kalau mau beda rate)
+        discount_value = redeem_points
+
+        if discount_value > total_amount:
+            discount_value = total_amount
+            redeem_points = total_amount
+
+        total_amount -= discount_value
+
+        # kurangi poin customer
+        customer.points -= redeem_points
+
+        db.add(
+            PointHistory(
+                customer_id=customer.id,
+                transaction_id=None,  # sementara, isi setelah tx dibuat
+                points=-redeem_points,
+                type="redeem",
+                description=f"Redeem on {invoice_no}",
+            )
+        )
+
+    # ==============================
     # CREATE TRANSACTION
     # ==============================
     tx = Transaction(
         invoice_no=invoice_no,
-        total=total_amount,  # 🔥 FIXED (no more total_amount)
+        total=total_amount,
         payment_method=payment_method,
         customer_id=customer.id if customer else None,
         created_by=created_by,
     )
 
     db.add(tx)
-    db.flush()  # get tx.id
+    db.flush()
 
     # ==============================
     # ATTACH ITEMS + STOCK MOVEMENT
@@ -127,7 +161,7 @@ def create_transaction(
             )
 
     # ==============================
-    # APPLY POINTS (IF CUSTOMER)
+    # APPLY EARN POINTS
     # ==============================
     if customer and total_points > 0:
         customer.points += total_points

@@ -18,9 +18,12 @@ class TransactionCreate(BaseModel):
     items: List[TransactionItemIn]
     payment_method: str  # cash | qris | ewallet
 
-    # optional loyalty
+    # optional loyalty (earn)
     customer_phone: Optional[str] = None
     customer_name: Optional[str] = None
+
+    # 🔁 optional redeem
+    redeem_points: Optional[int] = 0
 
 
 # ===============================
