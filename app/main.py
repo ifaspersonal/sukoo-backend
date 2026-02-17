@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, users, products, transactions, stocks, print, reports
+from app.routers import auth, users, products, transactions, stocks, print, reports, customers
 
 app = FastAPI(
     title="SUKOO POS API",
@@ -27,6 +27,7 @@ app.include_router(transactions.router)
 app.include_router(stocks.router)
 app.include_router(print.router)
 app.include_router(reports.router)
+app.include_router(customers.router)
 
 @app.get("/")
 def root():
