@@ -25,6 +25,10 @@ class TransactionCreate(BaseModel):
     # 🔁 optional redeem
     redeem_points: Optional[int] = 0
 
+    # 🔥 NEW (optional, default sale)
+    # frontend tidak wajib kirim
+    type: Optional[str] = "sale"
+
 
 # ===============================
 # OUTPUT (POS RESPONSE)
@@ -35,6 +39,9 @@ class TransactionOut(BaseModel):
     total: int
     payment_method: str
     created_at: datetime
+
+    # 🔥 NEW
+    type: str
 
     # optional customer
     customer_id: Optional[int] = None

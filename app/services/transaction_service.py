@@ -22,7 +22,7 @@ def create_transaction(
     customer_phone: str | None,
     customer_name: str | None,
     created_by: int,
-    redeem_points: int = 0,   # 🔥 NEW
+    redeem_points: int = 0,
 ):
     if not items:
         raise ValueError("Items cannot be empty")
@@ -33,7 +33,7 @@ def create_transaction(
     tx_items: list[TransactionItem] = []
 
     # ==============================
-    # OPTIONAL CUSTOMER
+    # OPTIONAL CUSTOMER (LOCK)
     # ==============================
     customer = None
     if customer_phone:
@@ -48,6 +48,7 @@ def create_transaction(
             customer = Customer(
                 phone=customer_phone,
                 name=customer_name,
+                points=0,
             )
             db.add(customer)
             db.flush()
@@ -78,7 +79,7 @@ def create_transaction(
         subtotal = product.price * item.qty
         total_amount += subtotal
 
-        # 🎯 1 point per qty
+        # 🎯 earn rule: 1 poin per qty
         total_points += item.qty
 
         tx_items.append(
@@ -94,6 +95,8 @@ def create_transaction(
     # ==============================
     # 🔁 REDEEM LOGIC
     # ==============================
+    is_redeem = False
+
     if redeem_points and redeem_points > 0:
 
         if not customer:
@@ -102,7 +105,7 @@ def create_transaction(
         if customer.points < redeem_points:
             raise ValueError("Insufficient points")
 
-        # 1 point = Rp 1 (ubah kalau mau beda rate)
+        # 1 point = Rp 1
         discount_value = redeem_points
 
         if discount_value > total_amount:
@@ -111,18 +114,15 @@ def create_transaction(
 
         total_amount -= discount_value
 
-        # kurangi poin customer
+        # kurangi poin
         customer.points -= redeem_points
 
-        db.add(
-            PointHistory(
-                customer_id=customer.id,
-                transaction_id=None,  # sementara, isi setelah tx dibuat
-                points=-redeem_points,
-                type="redeem",
-                description=f"Redeem on {invoice_no}",
-            )
-        )
+        is_redeem = True
+
+    # ==============================
+    # DETERMINE TRANSACTION TYPE
+    # ==============================
+    tx_type = "redeem" if is_redeem and total_amount == 0 else "sale"
 
     # ==============================
     # CREATE TRANSACTION
@@ -133,6 +133,7 @@ def create_transaction(
         payment_method=payment_method,
         customer_id=customer.id if customer else None,
         created_by=created_by,
+        type=tx_type,
     )
 
     db.add(tx)
@@ -161,9 +162,28 @@ def create_transaction(
             )
 
     # ==============================
-    # APPLY EARN POINTS
+    # INSERT REDEEM HISTORY
     # ==============================
-    if customer and total_points > 0:
+    if is_redeem:
+        db.add(
+            PointHistory(
+                customer_id=customer.id,
+                transaction_id=tx.id,
+                points=-redeem_points,
+                type="redeem",
+                description=f"Redeem on {invoice_no}",
+            )
+        )
+
+    # ==============================
+    # APPLY EARN POINTS
+    # (NO earn if full redeem)
+    # ==============================
+    if (
+        customer
+        and total_points > 0
+        and total_amount > 0  # prevent earn on full redeem
+    ):
         customer.points += total_points
 
         db.add(

@@ -9,10 +9,15 @@ class Transaction(Base, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True)
     invoice_no = Column(String, unique=True, index=True, nullable=False)
 
-    # 🔥 rename dari total_amount ➜ total
+    # 🔥 Total tetap dipakai (tidak diubah)
     total = Column(Integer, nullable=False)
 
     payment_method = Column(String, nullable=False)
+
+    # 🔥 NEW: transaction type
+    # sale = normal transaksi
+    # redeem = tukar poin (tidak masuk revenue)
+    type = Column(String, nullable=False, default="sale")
 
     # optional customer (loyalty)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
@@ -29,7 +34,11 @@ class Transaction(Base, TimestampMixin):
         cascade="all, delete-orphan"
     )
 
-    customer = relationship("Customer", back_populates="transactions")
+    customer = relationship(
+        "Customer",
+        back_populates="transactions"
+    )
+
     user = relationship("User")
 
     point_histories = relationship(
