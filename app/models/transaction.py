@@ -31,3 +31,9 @@ class Transaction(Base, TimestampMixin):
 
     customer = relationship("Customer", back_populates="transactions")
     user = relationship("User")
+
+    point_histories = relationship(
+        "PointHistory",
+        back_populates="transaction",
+        cascade="all, delete-orphan"
+    )

@@ -33,4 +33,7 @@ class PointHistory(Base, TimestampMixin):
     # RELATIONSHIPS
     # ==============================
     customer = relationship("Customer", back_populates="point_histories")
-    transaction = relationship("Transaction")
+    transaction = relationship(
+        "Transaction",
+        back_populates="point_histories"
+    )
