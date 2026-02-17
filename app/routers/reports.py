@@ -16,15 +16,26 @@ def daily_report(db: Session = Depends(get_db)):
 
     today = date.today()
 
-    # Filter transaksi hari ini
-    tx_today = db.query(Transaction).filter(
-        func.date(Transaction.created_at) == today
+    # ==============================
+    # TOTAL REVENUE (dari item)
+    # ==============================
+    total_revenue = (
+        db.query(func.sum(TransactionItem.subtotal))
+        .join(Transaction)
+        .filter(func.date(Transaction.created_at) == today)
+        .scalar()
+        or 0
     )
 
-    total_revenue = tx_today.with_entities(func.sum(Transaction.total)).scalar() or 0
-    total_transactions = tx_today.count()
+    total_transactions = (
+        db.query(Transaction)
+        .filter(func.date(Transaction.created_at) == today)
+        .count()
+    )
 
-    # Total cost
+    # ==============================
+    # TOTAL COST
+    # ==============================
     total_cost = (
         db.query(func.sum(TransactionItem.cost_price * TransactionItem.qty))
         .join(Transaction)
@@ -35,22 +46,34 @@ def daily_report(db: Session = Depends(get_db)):
 
     profit = total_revenue - total_cost
 
-    # Breakdown payment
+    # ==============================
+    # PAYMENT BREAKDOWN
+    # ==============================
     cash_total = (
-        tx_today.filter(Transaction.payment_method == "cash")
-        .with_entities(func.sum(Transaction.total))
+        db.query(func.sum(TransactionItem.subtotal))
+        .join(Transaction)
+        .filter(
+            func.date(Transaction.created_at) == today,
+            Transaction.payment_method == "cash"
+        )
         .scalar()
         or 0
     )
 
     qris_total = (
-        tx_today.filter(Transaction.payment_method == "qris")
-        .with_entities(func.sum(Transaction.total))
+        db.query(func.sum(TransactionItem.subtotal))
+        .join(Transaction)
+        .filter(
+            func.date(Transaction.created_at) == today,
+            Transaction.payment_method == "qris"
+        )
         .scalar()
         or 0
     )
 
-    # Top products
+    # ==============================
+    # TOP PRODUCTS
+    # ==============================
     top_products = (
         db.query(
             Product.name,
@@ -65,12 +88,15 @@ def daily_report(db: Session = Depends(get_db)):
         .all()
     )
 
-    # Hourly sales
+    # ==============================
+    # HOURLY SALES
+    # ==============================
     hourly_sales = (
         db.query(
             func.extract("hour", Transaction.created_at).label("hour"),
-            func.sum(Transaction.total).label("total")
+            func.sum(TransactionItem.subtotal).label("total")
         )
+        .join(TransactionItem)
         .filter(func.date(Transaction.created_at) == today)
         .group_by("hour")
         .order_by("hour")
@@ -79,12 +105,12 @@ def daily_report(db: Session = Depends(get_db)):
 
     return {
         "date": str(today),
-        "total_revenue": total_revenue,
-        "total_cost": total_cost,
-        "profit": profit,
+        "total_revenue": int(total_revenue),
+        "total_cost": int(total_cost),
+        "profit": int(profit),
         "total_transactions": total_transactions,
-        "cash_total": cash_total,
-        "qris_total": qris_total,
+        "cash_total": int(cash_total),
+        "qris_total": int(qris_total),
         "top_products": [
             {"name": p.name, "qty": int(p.qty)}
             for p in top_products
