@@ -4,10 +4,12 @@ from sqlalchemy import func
 from datetime import date, timedelta, datetime
 
 from app.core.deps import get_db
+from app.core.security import get_current_user
+
 from app.models.transaction import Transaction
 from app.models.transaction_item import TransactionItem
 from app.models.product import Product
-from app.core.security import get_current_user
+from app.models.point_history import PointHistory
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -21,13 +23,15 @@ def get_date_range(period: str):
     if period == "weekly":
         start = today - timedelta(days=today.weekday())
         end = start + timedelta(days=6)
+
     elif period == "monthly":
         start = today.replace(day=1)
         if start.month == 12:
             end = start.replace(year=start.year + 1, month=1, day=1) - timedelta(days=1)
         else:
             end = start.replace(month=start.month + 1, day=1) - timedelta(days=1)
-    else:
+
+    else:  # daily
         start = today
         end = today
 
@@ -59,13 +63,19 @@ def report_summary(
         func.date(Transaction.created_at) <= end_date,
     )
 
+    # 🔥 SALE FILTER (exclude redeem)
+    sale_filter = (
+        Transaction.type == "sale",
+        *base_filter,
+    )
+
     # ==============================
-    # TOTAL REVENUE
+    # TOTAL REVENUE (SALE ONLY)
     # ==============================
     total_revenue = (
         db.query(func.sum(TransactionItem.subtotal))
         .join(Transaction)
-        .filter(*base_filter)
+        .filter(*sale_filter)
         .scalar()
         or 0
     )
@@ -73,27 +83,39 @@ def report_summary(
     total_cost = (
         db.query(func.sum(TransactionItem.cost_price * TransactionItem.qty))
         .join(Transaction)
-        .filter(*base_filter)
+        .filter(*sale_filter)
         .scalar()
         or 0
     )
 
     total_transactions = (
         db.query(Transaction)
-        .filter(*base_filter)
+        .filter(*sale_filter)
         .count()
     )
 
     profit = total_revenue - total_cost
 
     # ==============================
-    # PAYMENT BREAKDOWN
+    # REDEEM TRANSACTION COUNT
     # ==============================
-    def payment_total(method):
+    redeem_transactions = (
+        db.query(Transaction)
+        .filter(
+            Transaction.type == "redeem",
+            *base_filter,
+        )
+        .count()
+    )
+
+    # ==============================
+    # PAYMENT BREAKDOWN (SALE ONLY)
+    # ==============================
+    def payment_total(method: str):
         return (
             db.query(func.sum(TransactionItem.subtotal))
             .join(Transaction)
-            .filter(*base_filter, Transaction.payment_method == method)
+            .filter(*sale_filter, Transaction.payment_method == method)
             .scalar()
             or 0
         )
@@ -102,7 +124,7 @@ def report_summary(
     qris_total = payment_total("qris")
 
     # ==============================
-    # TOP PRODUCTS
+    # TOP PRODUCTS (SALE ONLY)
     # ==============================
     top_products = (
         db.query(
@@ -111,7 +133,7 @@ def report_summary(
         )
         .join(TransactionItem)
         .join(Transaction)
-        .filter(*base_filter)
+        .filter(*sale_filter)
         .group_by(Product.name)
         .order_by(func.sum(TransactionItem.qty).desc())
         .limit(5)
@@ -119,7 +141,7 @@ def report_summary(
     )
 
     # ==============================
-    # HOURLY SALES (ONLY DAILY)
+    # HOURLY SALES (SALE ONLY)
     # ==============================
     hourly_sales = []
 
@@ -130,7 +152,7 @@ def report_summary(
                 func.sum(TransactionItem.subtotal).label("total")
             )
             .join(TransactionItem)
-            .filter(*base_filter)
+            .filter(*sale_filter)
             .group_by("hour")
             .order_by("hour")
             .all()
@@ -142,7 +164,35 @@ def report_summary(
         ]
 
     # ==============================
-    # TRANSACTION LIST
+    # POINT STATISTICS
+    # ==============================
+    total_points_earned = (
+        db.query(func.sum(PointHistory.points))
+        .filter(
+            PointHistory.type == "earn",
+            func.date(PointHistory.created_at) >= start_date,
+            func.date(PointHistory.created_at) <= end_date,
+        )
+        .scalar()
+        or 0
+    )
+
+    total_points_redeemed = (
+        db.query(func.sum(PointHistory.points))
+        .filter(
+            PointHistory.type == "redeem",
+            func.date(PointHistory.created_at) >= start_date,
+            func.date(PointHistory.created_at) <= end_date,
+        )
+        .scalar()
+            or 0
+    )
+
+    total_points_redeemed = abs(total_points_redeemed)
+    net_points = total_points_earned - total_points_redeemed
+
+    # ==============================
+    # TRANSACTION LIST (ALL TYPES)
     # ==============================
     transactions = (
         db.query(Transaction)
@@ -156,6 +206,8 @@ def report_summary(
             "id": tx.id,
             "created_at": tx.created_at,
             "payment_method": tx.payment_method,
+            "type": tx.type,
+            "total": tx.total,
         }
         for tx in transactions
     ]
@@ -164,17 +216,30 @@ def report_summary(
         "period": period,
         "start_date": str(start_date),
         "end_date": str(end_date),
+
+        # SALES ONLY
         "total_revenue": int(total_revenue),
         "total_cost": int(total_cost),
         "profit": int(profit),
         "total_transactions": total_transactions,
+        "redeem_transactions": redeem_transactions,
+
         "cash_total": int(cash_total),
         "qris_total": int(qris_total),
+
         "top_products": [
             {"name": p.name, "qty": int(p.qty)}
             for p in top_products
         ],
+
         "hourly_sales": hourly_sales,
+
+        # LOYALTY INFO
+        "total_points_earned": int(total_points_earned),
+        "total_points_redeemed": int(total_points_redeemed),
+        "net_points": int(net_points),
+
+        # TRANSACTIONS
         "transactions": tx_list,
     }
 
@@ -200,6 +265,8 @@ def transaction_detail(transaction_id: int, db: Session = Depends(get_db)):
         "id": tx.id,
         "created_at": tx.created_at,
         "payment_method": tx.payment_method,
+        "type": tx.type,
+        "total": tx.total,
         "items": [
             {
                 "product_name": item.product.name if item.product else "-",
