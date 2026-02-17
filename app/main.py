@@ -2,7 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, users, products, transactions, stocks, print
 
-app = FastAPI(title="SUKOO POS API")
+app = FastAPI(
+    title="SUKOO POS API",
+    redirect_slashes=False,   # 🔥 MATIKAN AUTO REDIRECT
+)
 
 origins = [
     "http://localhost:3000",
