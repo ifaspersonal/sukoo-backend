@@ -68,6 +68,8 @@ def create_transaction(
 
     product_map = {p.id: p for p in products}
 
+    total_qty = 0
+
     for item in items:
         product = product_map.get(item.product_id)
 
@@ -81,6 +83,7 @@ def create_transaction(
 
         subtotal = product.price * item.qty
         total_amount += subtotal
+        total_qty += item.qty
 
         # 🎯 earn rule: 1 poin per qty
         total_points += item.qty
@@ -96,9 +99,10 @@ def create_transaction(
         )
 
     # ==============================
-    # 🔁 REDEEM MODEL (10 poin = 1 item)
+    # 🔁 REDEEM LOGIC (10 poin = 1 item)
     # ==============================
     is_full_redeem = False
+    redeem_history = None
 
     if redeem_points and redeem_points > 0:
 
@@ -113,21 +117,19 @@ def create_transaction(
 
         redeem_qty = redeem_points // REDEEM_RATE
 
-        # Pastikan qty item minimal sesuai redeem
-        total_qty = sum(i.qty for i in items)
         if redeem_qty > total_qty:
             raise ValueError("Redeem exceeds item quantity")
 
         # Kurangi poin
         customer.points -= redeem_points
 
-        # Jika semua item diredeem → total jadi 0
+        # Jika semua item diredeem → full redeem
         if redeem_qty == total_qty:
             total_amount = 0
             payment_method = "redeem"
             is_full_redeem = True
 
-        # Insert redeem history (nanti isi tx.id setelah flush)
+        # Simpan redeem history (tx_id diisi nanti)
         redeem_history = PointHistory(
             customer_id=customer.id,
             transaction_id=None,
@@ -177,18 +179,14 @@ def create_transaction(
     # ==============================
     # FIX redeem history tx_id
     # ==============================
-    if redeem_points and redeem_points > 0:
+    if redeem_history:
         redeem_history.transaction_id = tx.id
 
     # ==============================
     # APPLY EARN POINTS
     # (NO earn if full redeem)
     # ==============================
-    if (
-        customer
-        and total_points > 0
-        and not is_full_redeem
-    ):
+    if customer and total_points > 0 and not is_full_redeem:
         customer.points += total_points
 
         db.add(
