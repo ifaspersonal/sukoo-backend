@@ -6,10 +6,6 @@ from app.core.security import get_current_user
 from app.schemas.transaction import TransactionCreate, TransactionOut
 from app.services.transaction_service import create_transaction
 
-from app.models.customer import Customer
-from app.models.point_history import PointHistory
-from app.models.transaction_item import TransactionItem
-
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 
@@ -20,9 +16,8 @@ def create_pos_transaction(
     user=Depends(get_current_user),
 ):
     try:
-        # ==============================
-        # 1️⃣ CREATE TRANSACTION
-        # ==============================
+        # 🔥 Semua business logic (stock + loyalty + history)
+        # sekarang hanya di service layer
         tx = create_transaction(
             db=db,
             items=payload.items,
@@ -31,41 +26,6 @@ def create_pos_transaction(
             customer_name=payload.customer_name,
             created_by=user.id,
         )
-
-        # ==============================
-        # 2️⃣ HANDLE LOYALTY POINTS
-        # ==============================
-        if tx.customer_id:
-
-            customer = db.get(Customer, tx.customer_id)
-            if customer:
-
-                # hitung total qty item
-                total_qty = (
-                    db.query(TransactionItem)
-                    .filter(TransactionItem.transaction_id == tx.id)
-                    .with_entities(TransactionItem.qty)
-                    .all()
-                )
-
-                total_points = sum(q[0] for q in total_qty)
-
-                if total_points > 0:
-                    # tambah poin ke customer
-                    customer.points = (customer.points or 0) + total_points
-
-                    # insert history
-                    history = PointHistory(
-                        customer_id=customer.id,
-                        transaction_id=tx.id,
-                        points=total_points,
-                        type="earn",
-                    )
-
-                    db.add(history)
-
-        db.commit()
-        db.refresh(tx)
 
         return tx
 
