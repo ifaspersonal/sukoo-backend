@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 LINE_WIDTH = 32  # 58mm thermal
 
@@ -20,11 +21,29 @@ def _calc_total(items) -> int:
 def _format_datetime(dt: datetime | None) -> str:
     if not dt:
         return "-"
-    return dt.strftime("%d-%m-%Y %H:%M")
+
+    # Jika datetime tidak punya timezone → anggap UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+
+    # Convert ke WIB
+    dt_wib = dt.astimezone(ZoneInfo("Asia/Jakarta"))
+
+    return dt_wib.strftime("%d-%m-%Y %H:%M")
 
 
 def _separator(char: str = "-") -> str:
     return char * LINE_WIDTH
+
+
+def _line_item(name: str, qty: int, subtotal: int) -> str:
+    """
+    Format 1 baris item supaya rapi 58mm
+    """
+    name = name[:16].ljust(16)
+    qty_str = f"x{qty}".ljust(4)
+    price_str = _rupiah(subtotal).rjust(8)
+    return f"{name} {qty_str} {price_str}"
 
 
 def build_receipt_preview(tx, items):
@@ -33,12 +52,13 @@ def build_receipt_preview(tx, items):
     - 58mm friendly
     - Tanpa ESC/POS command
     - Loyalty info included
+    - Timezone WIB
     """
 
     lines: list[str] = []
 
     # ==============================
-    # HEADER (CENTER VIA TEXT)
+    # HEADER (CENTER)
     # ==============================
     lines.append("SUKOO COFFEE".center(LINE_WIDTH))
     lines.append("Fresh Brew Everyday".center(LINE_WIDTH))
@@ -48,32 +68,33 @@ def build_receipt_preview(tx, items):
     # META INFO
     # ==============================
     created_at = getattr(tx, "created_at", None)
+
     cashier = (
         getattr(tx, "user", None).username
         if hasattr(tx, "user") and tx.user
         else "Kasir"
     )
-    trx_no = f"#{str(tx.id).zfill(6)}"
 
-    lines.append(f"Tanggal : {_format_datetime(created_at)}")
-    lines.append(f"Kasir   : {cashier}")
+    trx_no = f"#{str(tx.id).zfill(6)}"
+    payment_method = getattr(tx, "payment_method", "-").upper()
+
+    lines.append(f"Tanggal  : {_format_datetime(created_at)}")
+    lines.append(f"Kasir    : {cashier}")
     lines.append(f"Transaksi: {trx_no}")
-    lines.append(f"Metode  : {getattr(tx, 'payment_method', '-').upper()}")
+    lines.append(f"Metode   : {payment_method}")
     lines.append(_separator())
 
     # ==============================
     # ITEMS
     # ==============================
     for item in items:
-        name = _product_name(item)[:16].ljust(16)
-        qty = f"x{item.qty}".ljust(4)
-        price = _rupiah(item.subtotal).rjust(8)
-        lines.append(f"{name} {qty} {price}")
+        name = _product_name(item)
+        lines.append(_line_item(name, item.qty, item.subtotal))
 
     lines.append(_separator())
 
     # ==============================
-    # TOTAL (TEXT BOLD STYLE)
+    # TOTAL
     # ==============================
     grand_total = _calc_total(items)
     total_str = _rupiah(grand_total).rjust(8)
@@ -101,7 +122,10 @@ def build_receipt_preview(tx, items):
         if redeemed > 0:
             lines.append(f"Poin Redeem  : -{redeemed}")
 
-        lines.append(f"Sisa Poin    : {tx.customer.points}")
+        # Safe fallback kalau points None
+        remaining_points = tx.customer.points or 0
+        lines.append(f"Sisa Poin    : {remaining_points}")
+
         lines.append(_separator())
 
     # ==============================
