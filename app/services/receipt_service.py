@@ -29,26 +29,19 @@ def _separator(char: str = "-") -> str:
 
 def build_receipt_preview(tx, items):
     """
-    STRUK PROFESSIONAL
+    STRUK UNTUK RAWBT INTENT MODE (PLAIN TEXT)
     - 58mm friendly
-    - Compatible RawBT (ESC/POS safe)
+    - Tanpa ESC/POS command
     - Loyalty info included
     """
 
     lines: list[str] = []
 
     # ==============================
-    # ESC INIT (safe for RawBT)
+    # HEADER (CENTER VIA TEXT)
     # ==============================
-    lines.append("\x1B\x40")  # Initialize printer
-
-    # ==============================
-    # HEADER (CENTER)
-    # ==============================
-    lines.append("\x1B\x61\x01")  # center align
-    lines.append("SUKOO COFFEE")
-    lines.append("Fresh Brew Everyday")
-    lines.append("\x1B\x61\x00")  # left align
+    lines.append("SUKOO COFFEE".center(LINE_WIDTH))
+    lines.append("Fresh Brew Everyday".center(LINE_WIDTH))
     lines.append(_separator())
 
     # ==============================
@@ -80,16 +73,12 @@ def build_receipt_preview(tx, items):
     lines.append(_separator())
 
     # ==============================
-    # TOTAL (BOLD)
+    # TOTAL (TEXT BOLD STYLE)
     # ==============================
     grand_total = _calc_total(items)
+    total_str = _rupiah(grand_total).rjust(8)
 
-    lines.append("\x1B\x45\x01")  # bold on
-    lines.append(
-        f"{'TOTAL'.ljust(24)}{_rupiah(grand_total).rjust(8)}"
-    )
-    lines.append("\x1B\x45\x00")  # bold off
-
+    lines.append(f"{'TOTAL'.ljust(24)}{total_str}")
     lines.append(_separator())
 
     # ==============================
@@ -118,14 +107,14 @@ def build_receipt_preview(tx, items):
     # ==============================
     # FOOTER
     # ==============================
-    lines.append("\x1B\x61\x01")  # center
-    lines.append("Terima kasih 🙏")
-    lines.append("Follow IG @sukoocoffee")
-    lines.append("\x1B\x61\x00")
+    lines.append("Terima kasih 🙏".center(LINE_WIDTH))
+    lines.append("Follow IG @sukoocoffee".center(LINE_WIDTH))
 
     # ==============================
     # AUTO FEED
     # ==============================
-    lines.append("\n\n\n")
+    lines.append("")
+    lines.append("")
+    lines.append("")
 
     return "\n".join(lines)
