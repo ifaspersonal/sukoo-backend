@@ -23,21 +23,37 @@ def _format_datetime(dt: datetime | None) -> str:
     return dt.strftime("%d-%m-%Y %H:%M")
 
 
+def _separator(char: str = "-") -> str:
+    return char * LINE_WIDTH
+
+
 def build_receipt_preview(tx, items):
     """
-    STRUK UNTUK FRONTEND PREVIEW (POLISHED)
-    - TANPA ESC/POS
+    STRUK PROFESSIONAL
     - 58mm friendly
+    - Compatible RawBT (ESC/POS safe)
+    - Loyalty info included
     """
 
     lines: list[str] = []
 
-    # ===== HEADER =====
-    lines.append("SUKOO COFFEE".center(LINE_WIDTH))
-    lines.append("Fresh Brew Everyday".center(LINE_WIDTH))
-    lines.append("-" * LINE_WIDTH)
+    # ==============================
+    # ESC INIT (safe for RawBT)
+    # ==============================
+    lines.append("\x1B\x40")  # Initialize printer
 
-    # ===== META INFO =====
+    # ==============================
+    # HEADER (CENTER)
+    # ==============================
+    lines.append("\x1B\x61\x01")  # center align
+    lines.append("SUKOO COFFEE")
+    lines.append("Fresh Brew Everyday")
+    lines.append("\x1B\x61\x00")  # left align
+    lines.append(_separator())
+
+    # ==============================
+    # META INFO
+    # ==============================
     created_at = getattr(tx, "created_at", None)
     cashier = (
         getattr(tx, "user", None).username
@@ -49,28 +65,67 @@ def build_receipt_preview(tx, items):
     lines.append(f"Tanggal : {_format_datetime(created_at)}")
     lines.append(f"Kasir   : {cashier}")
     lines.append(f"Transaksi: {trx_no}")
-    lines.append("-" * LINE_WIDTH)
+    lines.append(f"Metode  : {getattr(tx, 'payment_method', '-').upper()}")
+    lines.append(_separator())
 
-    # ===== ITEMS =====
+    # ==============================
+    # ITEMS
+    # ==============================
     for item in items:
         name = _product_name(item)[:16].ljust(16)
         qty = f"x{item.qty}".ljust(4)
         price = _rupiah(item.subtotal).rjust(8)
         lines.append(f"{name} {qty} {price}")
 
-    lines.append("-" * LINE_WIDTH)
+    lines.append(_separator())
 
-    # ===== TOTAL =====
+    # ==============================
+    # TOTAL (BOLD)
+    # ==============================
     grand_total = _calc_total(items)
-    total = _rupiah(grand_total).rjust(8)
-    lines.append(f"{'TOTAL'.ljust(24)}{total}")
 
-    payment = getattr(tx, "payment_method", "-").upper()
-    lines.append(f"Bayar: {payment}")
-    lines.append("")
+    lines.append("\x1B\x45\x01")  # bold on
+    lines.append(
+        f"{'TOTAL'.ljust(24)}{_rupiah(grand_total).rjust(8)}"
+    )
+    lines.append("\x1B\x45\x00")  # bold off
 
-    # ===== FOOTER =====
-    lines.append("Terima kasih 🙏".center(LINE_WIDTH))
-    lines.append("-" * LINE_WIDTH)
+    lines.append(_separator())
+
+    # ==============================
+    # LOYALTY INFO
+    # ==============================
+    if hasattr(tx, "customer") and tx.customer:
+        earned = 0
+        redeemed = 0
+
+        if hasattr(tx, "point_histories") and tx.point_histories:
+            for ph in tx.point_histories:
+                if ph.type == "earn":
+                    earned += ph.points
+                elif ph.type == "redeem":
+                    redeemed += abs(ph.points)
+
+        if earned > 0:
+            lines.append(f"Poin Didapat : +{earned}")
+
+        if redeemed > 0:
+            lines.append(f"Poin Redeem  : -{redeemed}")
+
+        lines.append(f"Sisa Poin    : {tx.customer.points}")
+        lines.append(_separator())
+
+    # ==============================
+    # FOOTER
+    # ==============================
+    lines.append("\x1B\x61\x01")  # center
+    lines.append("Terima kasih 🙏")
+    lines.append("Follow IG @sukoocoffee")
+    lines.append("\x1B\x61\x00")
+
+    # ==============================
+    # AUTO FEED
+    # ==============================
+    lines.append("\n\n\n")
 
     return "\n".join(lines)
