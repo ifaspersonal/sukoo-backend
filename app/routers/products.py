@@ -59,3 +59,41 @@ def deactivate_product(product_id: int, db: Session = Depends(get_db)):
     product.is_active = False
     db.commit()
     return {"status": "deleted"}
+
+@router.put("/{product_id}/stock")
+def update_product_stock(
+    product_id: int,
+    stock: int,
+    db: Session = Depends(get_db),
+):
+    from app.models.product import Product
+
+    product = db.get(Product, product_id)
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    product.stock = stock
+    db.commit()
+    db.refresh(product)
+
+    return product
+
+
+@router.post("/reset-daily-stock")
+def reset_daily_stock(db: Session = Depends(get_db)):
+    from datetime import date
+    from app.models.product import Product
+
+    products = db.query(Product).all()
+
+    today = date.today()
+
+    for product in products:
+        if not product.is_unlimited:
+            product.stock = product.daily_stock
+            product.stock_date = today
+
+    db.commit()
+
+    return {"message": "Daily stock reset successful"}
