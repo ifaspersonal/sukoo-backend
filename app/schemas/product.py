@@ -12,6 +12,10 @@ class ProductBase(BaseModel):
     is_unlimited: bool = False
     is_active: bool = True
 
+    # 🔥 NEW INTEGER LOYALTY SYSTEM
+    category: str = "drink"
+    loyalty_point_value: int = 1
+
 
 # ======================
 # CREATE
@@ -31,6 +35,10 @@ class ProductUpdate(BaseModel):
     stock: Optional[int] = None  # opsional (admin/manual)
     is_unlimited: Optional[bool] = None
     is_active: Optional[bool] = None
+
+    # 🔥 NEW FIELDS (optional saat update)
+    category: Optional[str] = None
+    loyalty_point_value: Optional[int] = None
 
 
 # ======================

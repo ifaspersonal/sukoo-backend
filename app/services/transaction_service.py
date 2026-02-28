@@ -85,8 +85,9 @@ def create_transaction(
         total_amount += subtotal
         total_qty += item.qty
 
-        # 🎯 earn rule: 1 poin per qty
-        total_points += item.qty
+        # 🔥 INTEGER LOYALTY SYSTEM
+        if product.loyalty_point_value and product.loyalty_point_value > 0:
+            total_points += product.loyalty_point_value * item.qty
 
         tx_items.append(
             TransactionItem(
