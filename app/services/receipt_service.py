@@ -61,7 +61,7 @@ def build_receipt_preview(tx, items):
     # HEADER (CENTER)
     # ==============================
     lines.append("SUKOO COFFEE".center(LINE_WIDTH))
-    lines.append("Fresh Brew Everyday".center(LINE_WIDTH))
+    lines.append("Seduh Rasa Nikmati Cerita".center(LINE_WIDTH))
     lines.append(_separator())
 
     # ==============================
@@ -106,6 +106,13 @@ def build_receipt_preview(tx, items):
     # LOYALTY INFO
     # ==============================
     if hasattr(tx, "customer") and tx.customer:
+
+        # 🔥 TAMBAH NAMA CUSTOMER
+        customer_name = getattr(tx.customer, "name", None)
+        if customer_name:
+            lines.append(f"Customer    : {customer_name}")
+            lines.append(_separator())
+
         earned = 0
         redeemed = 0
 
@@ -131,8 +138,8 @@ def build_receipt_preview(tx, items):
     # ==============================
     # FOOTER
     # ==============================
-    lines.append("Terima kasih 🙏".center(LINE_WIDTH))
-    lines.append("Follow IG @sukoocoffee".center(LINE_WIDTH))
+    lines.append("Terima kasih".center(LINE_WIDTH))
+    lines.append("Follow IG @kopisukoo".center(LINE_WIDTH))
 
     # ==============================
     # AUTO FEED
