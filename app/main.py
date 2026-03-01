@@ -9,7 +9,7 @@ app = FastAPI(
 
 origins = [
     "http://localhost:3000",
-    "https://sukoo-pos-frontend.vercel.app",
+    "https://sukoo-pos.vercel.app",
 ]
 
 app.add_middleware(
