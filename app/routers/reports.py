@@ -6,6 +6,7 @@ from datetime import date, timedelta, datetime
 from app.core.deps import get_db
 from app.core.security import get_current_user
 
+from app.models.user import User
 from app.models.transaction import Transaction
 from app.models.transaction_item import TransactionItem
 from app.models.product import Product
@@ -31,7 +32,7 @@ def get_date_range(period: str):
         else:
             end = start.replace(month=start.month + 1, day=1) - timedelta(days=1)
 
-    else:  # daily
+    else:
         start = today
         end = today
 
@@ -39,15 +40,20 @@ def get_date_range(period: str):
 
 
 # =========================================
-# REPORT SUMMARY
+# REPORT SUMMARY (OWNER ONLY)
 # =========================================
-@router.get("", dependencies=[Depends(get_current_user)])
+@router.get("")
 def report_summary(
     period: str = Query("daily", enum=["daily", "weekly", "monthly"]),
     start: str | None = None,
     end: str | None = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+
+    # 🔒 ROLE CHECK
+    if current_user.role != "owner":
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     # ==============================
     # DATE LOGIC
@@ -63,15 +69,11 @@ def report_summary(
         func.date(Transaction.created_at) <= end_date,
     )
 
-    # 🔥 SALE FILTER (exclude redeem)
     sale_filter = (
         Transaction.type == "sale",
         *base_filter,
     )
 
-    # ==============================
-    # TOTAL REVENUE (SALE ONLY)
-    # ==============================
     total_revenue = (
         db.query(func.sum(TransactionItem.subtotal))
         .join(Transaction)
@@ -96,9 +98,6 @@ def report_summary(
 
     profit = total_revenue - total_cost
 
-    # ==============================
-    # REDEEM TRANSACTION COUNT
-    # ==============================
     redeem_transactions = (
         db.query(Transaction)
         .filter(
@@ -108,9 +107,6 @@ def report_summary(
         .count()
     )
 
-    # ==============================
-    # PAYMENT BREAKDOWN (SALE ONLY)
-    # ==============================
     def payment_total(method: str):
         return (
             db.query(func.sum(TransactionItem.subtotal))
@@ -123,9 +119,6 @@ def report_summary(
     cash_total = payment_total("cash")
     qris_total = payment_total("qris")
 
-    # ==============================
-    # TOP PRODUCTS (SALE ONLY)
-    # ==============================
     top_products = (
         db.query(
             Product.name,
@@ -140,9 +133,6 @@ def report_summary(
         .all()
     )
 
-    # ==============================
-    # HOURLY SALES (SALE ONLY)
-    # ==============================
     hourly_sales = []
 
     if period == "daily" and not (start and end):
@@ -163,9 +153,6 @@ def report_summary(
             for h in hourly
         ]
 
-    # ==============================
-    # POINT STATISTICS
-    # ==============================
     total_points_earned = (
         db.query(func.sum(PointHistory.points))
         .filter(
@@ -185,15 +172,12 @@ def report_summary(
             func.date(PointHistory.created_at) <= end_date,
         )
         .scalar()
-            or 0
+        or 0
     )
 
     total_points_redeemed = abs(total_points_redeemed)
     net_points = total_points_earned - total_points_redeemed
 
-    # ==============================
-    # TRANSACTION LIST (ALL TYPES)
-    # ==============================
     transactions = (
         db.query(Transaction)
         .filter(*base_filter)
@@ -216,40 +200,37 @@ def report_summary(
         "period": period,
         "start_date": str(start_date),
         "end_date": str(end_date),
-
-        # SALES ONLY
         "total_revenue": int(total_revenue),
         "total_cost": int(total_cost),
         "profit": int(profit),
         "total_transactions": total_transactions,
         "redeem_transactions": redeem_transactions,
-
         "cash_total": int(cash_total),
         "qris_total": int(qris_total),
-
         "top_products": [
             {"name": p.name, "qty": int(p.qty)}
             for p in top_products
         ],
-
         "hourly_sales": hourly_sales,
-
-        # LOYALTY INFO
         "total_points_earned": int(total_points_earned),
         "total_points_redeemed": int(total_points_redeemed),
         "net_points": int(net_points),
-
-        # TRANSACTIONS
         "transactions": tx_list,
     }
 
 
 # =========================================
-# TRANSACTION DETAIL
+# TRANSACTION DETAIL (OWNER ONLY)
 # =========================================
-@router.get("/transaction/{transaction_id}",
-            dependencies=[Depends(get_current_user)])
-def transaction_detail(transaction_id: int, db: Session = Depends(get_db)):
+@router.get("/transaction/{transaction_id}")
+def transaction_detail(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    if current_user.role != "owner":
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     tx = db.get(Transaction, transaction_id)
     if not tx:
