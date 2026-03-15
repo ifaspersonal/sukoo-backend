@@ -178,6 +178,39 @@ def report_summary(
     total_points_redeemed = abs(total_points_redeemed)
     net_points = total_points_earned - total_points_redeemed
 
+    # ==============================
+    # SALES TREND (FOLLOW FILTER)
+    # ==============================
+    trend_sales = []
+
+    trend = (
+        db.query(
+            func.date(Transaction.created_at).label("date"),
+            func.sum(TransactionItem.subtotal).label("revenue"),
+            func.sum(TransactionItem.cost_price * TransactionItem.qty).label("cost")
+        )
+        .join(TransactionItem)
+        .filter(
+            Transaction.type == "sale",
+            func.date(Transaction.created_at) >= start_date,
+            func.date(Transaction.created_at) <= end_date
+        )
+        .group_by("date")
+        .order_by("date")
+        .all()
+    )
+
+    for t in trend:
+
+        revenue = int(t.revenue or 0)
+        cost = int(t.cost or 0)
+
+        trend_sales.append({
+            "date": str(t.date),
+            "revenue": revenue,
+            "profit": revenue - cost
+        })
+
     transactions = (
         db.query(Transaction)
         .filter(*base_filter)
@@ -212,6 +245,7 @@ def report_summary(
             for p in top_products
         ],
         "hourly_sales": hourly_sales,
+        "trend_sales": trend_sales,
         "total_points_earned": int(total_points_earned),
         "total_points_redeemed": int(total_points_redeemed),
         "net_points": int(net_points),
