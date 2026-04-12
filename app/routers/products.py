@@ -13,31 +13,35 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 @router.get("", response_model=list[ProductOut])
 def list_products(
+    branch_id: int | None = None,  # 🔥 TAMBAH
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # 🔥 TAMBAH
+    current_user: User = Depends(get_current_user),
 ):
 
-    # =============================
-    # FILTER BY ROLE
-    # =============================
-    if current_user.role == "owner":
-        products = db.query(Product).filter(Product.is_active == True).all()
-    else:
-        products = (
-            db.query(Product)
-            .filter(
-                Product.is_active == True,
-                Product.branch_id == current_user.branch_id  # 🔥 FILTER CABANG
-            )
-            .all()
-        )
+    query = db.query(Product).filter(Product.is_active == True)
 
     # =============================
-    # DAILY STOCK LOGIC (tetap)
+    # OWNER → bisa filter cabang
+    # =============================
+    if current_user.role == "owner":
+
+        if branch_id:
+            query = query.filter(Product.branch_id == branch_id)
+
+    # =============================
+    # NON OWNER → auto cabang sendiri
+    # =============================
+    else:
+        query = query.filter(Product.branch_id == current_user.branch_id)
+
+    products = query.all()
+
+    # =============================
+    # DAILY STOCK
     # =============================
     for p in products:
         if not p.is_unlimited:
-            ensure_daily_stock(db, p, user_id=current_user.id)  # 🔥 FIX USER
+            ensure_daily_stock(db, p, user_id=current_user.id)
 
     db.commit()
     return products
@@ -46,6 +50,10 @@ def list_products(
 @router.post("", response_model=ProductOut,
              dependencies=[Depends(require_role("owner", "supervisor"))])
 def create_product(payload: ProductCreate, db: Session = Depends(get_db)):
+
+    if not payload.branch_id:
+        raise HTTPException(status_code=400, detail="branch_id is required")
+
     return create_product_service(db, payload)
 
 
