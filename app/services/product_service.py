@@ -11,6 +11,13 @@ def create_product(db: Session, payload: ProductCreate) -> Product:
         stock=0,  # stock runtime, di-reset harian
         is_unlimited=payload.is_unlimited,
         is_active=True,
+
+        # 🔥 WAJIB TAMBAH INI
+        branch_id=payload.branch_id,
+
+        # 🔥 BIAR KONSISTEN DENGAN SYSTEM BARU
+        category=payload.category,
+        loyalty_point_value=payload.loyalty_point_value,
     )
 
     db.add(product)
