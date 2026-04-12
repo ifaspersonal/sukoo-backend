@@ -178,6 +178,7 @@ def report_summary(
             PointHistory.type == "earn",
             func.date(PointHistory.created_at) >= start_date,
             func.date(PointHistory.created_at) <= end_date,
+            *base_filter,  # 🔥 pakai ini
         )
         .scalar()
         or 0
@@ -189,6 +190,7 @@ def report_summary(
             PointHistory.type == "redeem",
             func.date(PointHistory.created_at) >= start_date,
             func.date(PointHistory.created_at) <= end_date,
+            *base_filter,  # 🔥 pakai ini
         )
         .scalar()
         or 0
