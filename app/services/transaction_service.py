@@ -26,6 +26,7 @@ def create_transaction(
     customer_name: str | None,
     created_by: int,
     redeem_points: int = 0,
+    branch_id: int | None = None,  # 🔥 TAMBAH INI
 ):
     if not items:
         raise ValueError("Items cannot be empty")
@@ -150,6 +151,7 @@ def create_transaction(
         payment_method=payment_method,
         customer_id=customer.id if customer else None,
         created_by=created_by,
+        branch_id=branch_id,  # ✅ WAJIB
     )
 
     db.add(tx)
@@ -174,6 +176,7 @@ def create_transaction(
                     qty=item.qty,
                     note=f"TX {invoice_no}",
                     created_by=created_by,
+                    branch_id=branch_id,  # ✅ BIAR STOCK PER CABANG VALID
                 )
             )
 

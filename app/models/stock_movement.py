@@ -9,4 +9,5 @@ class StockMovement(Base, TimestampMixin):
     type = Column(String, nullable=False)  # IN | OUT | OPNAME
     qty = Column(Integer, nullable=False)
     note = Column(String)
+    branch_id = Column(Integer, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"))

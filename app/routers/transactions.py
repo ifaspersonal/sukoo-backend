@@ -8,7 +8,6 @@ from app.services.transaction_service import create_transaction
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
-
 @router.post("/", response_model=TransactionOut)
 def create_pos_transaction(
     payload: TransactionCreate,
@@ -16,7 +15,15 @@ def create_pos_transaction(
     user=Depends(get_current_user),
 ):
     try:
-        # 🔥 Semua business logic di service layer
+        # 🔥 BLOCK OWNER
+        if user.role == "owner":
+            raise HTTPException(status_code=403, detail="Owner tidak boleh transaksi")
+
+        # 🔥 VALIDASI BRANCH
+        if not user.branch_id:
+            raise HTTPException(status_code=400, detail="User belum punya branch")
+
+        # 🔥 CALL SERVICE
         tx = create_transaction(
             db=db,
             items=payload.items,
@@ -24,7 +31,8 @@ def create_pos_transaction(
             customer_phone=payload.customer_phone,
             customer_name=payload.customer_name,
             created_by=user.id,
-            redeem_points=payload.redeem_points or 0,  # ✅ NEW
+            redeem_points=payload.redeem_points or 0,
+            branch_id=user.branch_id,  # ✅ TAMBAH INI
         )
 
         return tx

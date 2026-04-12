@@ -47,6 +47,7 @@ def report_summary(
     period: str = Query("daily", enum=["daily", "weekly", "monthly"]),
     start: str | None = None,
     end: str | None = None,
+    branch_id: int | None = None,  # 🔥 TAMBAH INI
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -69,9 +70,18 @@ def report_summary(
         func.date(Transaction.created_at) <= end_date,
     )
 
+    # ==============================
+    # BRANCH FILTER
+    # ==============================
+    if branch_id:
+        branch_filter = (Transaction.branch_id == branch_id,)
+    else:
+        branch_filter = ()
+
     sale_filter = (
         Transaction.type == "sale",
         *base_filter,
+        *branch_filter,  # 🔥 TAMBAH
     )
 
     total_revenue = (
@@ -103,6 +113,7 @@ def report_summary(
         .filter(
             Transaction.type == "redeem",
             *base_filter,
+            *branch_filter,  # 🔥 TAMBAH
         )
         .count()
     )
@@ -193,7 +204,8 @@ def report_summary(
         .filter(
             Transaction.type == "sale",
             func.date(Transaction.created_at) >= start_date,
-            func.date(Transaction.created_at) <= end_date
+            func.date(Transaction.created_at) <= end_date,
+            *branch_filter,  # 🔥 TAMBAH
         )
         .group_by("date")
         .order_by("date")
@@ -213,7 +225,7 @@ def report_summary(
 
     transactions = (
         db.query(Transaction)
-        .filter(*base_filter)
+        .filter(*base_filter, *branch_filter)
         .order_by(Transaction.created_at.desc())
         .all()
     )
