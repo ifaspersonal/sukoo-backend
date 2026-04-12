@@ -16,6 +16,9 @@ class ProductBase(BaseModel):
     category: str = "drink"
     loyalty_point_value: int = 1
 
+    # 🔥 NEW FIELD (WAJIB ADA)
+    branch_id: int
+
 
 # ======================
 # CREATE
@@ -32,13 +35,16 @@ class ProductUpdate(BaseModel):
     price: Optional[int] = None
     cost_price: Optional[int] = None
     daily_stock: Optional[int] = None
-    stock: Optional[int] = None  # opsional (admin/manual)
+    stock: Optional[int] = None
     is_unlimited: Optional[bool] = None
     is_active: Optional[bool] = None
 
-    # 🔥 NEW FIELDS (optional saat update)
+    # 🔥 NEW FIELDS
     category: Optional[str] = None
     loyalty_point_value: Optional[int] = None
+
+    # 🔥 TAMBAH INI (opsional saat update)
+    branch_id: Optional[int] = None
 
 
 # ======================
