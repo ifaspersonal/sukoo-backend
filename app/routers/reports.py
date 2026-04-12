@@ -39,15 +39,12 @@ def get_date_range(period: str):
     return start, end
 
 
-# =========================================
-# REPORT SUMMARY (OWNER ONLY)
-# =========================================
 @router.get("")
 def report_summary(
     period: str = Query("daily", enum=["daily", "weekly", "monthly"]),
     start: str | None = None,
     end: str | None = None,
-    branch_id: int | None = None,  # 🔥 TAMBAH INI
+    branch_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -65,25 +62,25 @@ def report_summary(
     else:
         start_date, end_date = get_date_range(period)
 
-    base_filter = (
+    # ==============================
+    # ✅ SINGLE SOURCE FILTER
+    # ==============================
+    base_filter = [
         func.date(Transaction.created_at) >= start_date,
         func.date(Transaction.created_at) <= end_date,
-    )
+    ]
 
-    # ==============================
-    # BRANCH FILTER
-    # ==============================
     if branch_id:
-        branch_filter = (Transaction.branch_id == branch_id,)
-    else:
-        branch_filter = ()
+        base_filter.append(Transaction.branch_id == branch_id)
 
-    sale_filter = (
+    sale_filter = [
         Transaction.type == "sale",
         *base_filter,
-        *branch_filter,  # 🔥 TAMBAH
-    )
+    ]
 
+    # ==============================
+    # KPI
+    # ==============================
     total_revenue = (
         db.query(func.sum(TransactionItem.subtotal))
         .join(Transaction)
@@ -113,11 +110,13 @@ def report_summary(
         .filter(
             Transaction.type == "redeem",
             *base_filter,
-            *branch_filter,  # 🔥 TAMBAH
         )
         .count()
     )
 
+    # ==============================
+    # PAYMENT
+    # ==============================
     def payment_total(method: str):
         return (
             db.query(func.sum(TransactionItem.subtotal))
@@ -130,6 +129,9 @@ def report_summary(
     cash_total = payment_total("cash")
     qris_total = payment_total("qris")
 
+    # ==============================
+    # TOP PRODUCTS
+    # ==============================
     top_products = (
         db.query(
             Product.name,
@@ -144,6 +146,9 @@ def report_summary(
         .all()
     )
 
+    # ==============================
+    # HOURLY
+    # ==============================
     hourly_sales = []
 
     if period == "daily" and not (start and end):
@@ -164,13 +169,15 @@ def report_summary(
             for h in hourly
         ]
 
+    # ==============================
+    # LOYALTY
+    # ==============================
     total_points_earned = (
         db.query(func.sum(PointHistory.points))
         .filter(
             PointHistory.type == "earn",
             func.date(PointHistory.created_at) >= start_date,
             func.date(PointHistory.created_at) <= end_date,
-            *branch_filter,  # 🔥 TAMBAH INI
         )
         .scalar()
         or 0
@@ -182,7 +189,6 @@ def report_summary(
             PointHistory.type == "redeem",
             func.date(PointHistory.created_at) >= start_date,
             func.date(PointHistory.created_at) <= end_date,
-            *branch_filter,  # 🔥 TAMBAH INI
         )
         .scalar()
         or 0
@@ -192,10 +198,8 @@ def report_summary(
     net_points = total_points_earned - total_points_redeemed
 
     # ==============================
-    # SALES TREND (FOLLOW FILTER)
+    # SALES TREND
     # ==============================
-    trend_sales = []
-
     trend = (
         db.query(
             func.date(Transaction.created_at).label("date"),
@@ -205,29 +209,28 @@ def report_summary(
         .join(TransactionItem)
         .filter(
             Transaction.type == "sale",
-            func.date(Transaction.created_at) >= start_date,
-            func.date(Transaction.created_at) <= end_date,
-            *branch_filter,  # 🔥 TAMBAH
+            *base_filter,
         )
         .group_by("date")
         .order_by("date")
         .all()
     )
 
-    for t in trend:
-
-        revenue = int(t.revenue or 0)
-        cost = int(t.cost or 0)
-
-        trend_sales.append({
+    trend_sales = [
+        {
             "date": str(t.date),
-            "revenue": revenue,
-            "profit": revenue - cost
-        })
+            "revenue": int(t.revenue or 0),
+            "profit": int((t.revenue or 0) - (t.cost or 0)),
+        }
+        for t in trend
+    ]
 
+    # ==============================
+    # TRANSACTIONS
+    # ==============================
     transactions = (
         db.query(Transaction)
-        .filter(*base_filter, *branch_filter)
+        .filter(*base_filter)
         .order_by(Transaction.created_at.desc())
         .all()
     )
