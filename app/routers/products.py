@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.deps import get_db
 from app.models.product import Product
+from app.models.user import User
 from app.schemas.product import ProductCreate, ProductUpdate, ProductOut
 from app.services.stock_service import ensure_daily_stock
 from app.core.roles import require_role
@@ -10,15 +11,33 @@ from app.services.product_service import create_product as create_product_servic
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
-# ✅ TANPA trailing slash
-@router.get("", response_model=list[ProductOut],
-            dependencies=[Depends(get_current_user)])
-def list_products(db: Session = Depends(get_db)):
-    products = db.query(Product).filter(Product.is_active == True).all()
+@router.get("", response_model=list[ProductOut])
+def list_products(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # 🔥 TAMBAH
+):
 
+    # =============================
+    # FILTER BY ROLE
+    # =============================
+    if current_user.role == "owner":
+        products = db.query(Product).filter(Product.is_active == True).all()
+    else:
+        products = (
+            db.query(Product)
+            .filter(
+                Product.is_active == True,
+                Product.branch_id == current_user.branch_id  # 🔥 FILTER CABANG
+            )
+            .all()
+        )
+
+    # =============================
+    # DAILY STOCK LOGIC (tetap)
+    # =============================
     for p in products:
         if not p.is_unlimited:
-            ensure_daily_stock(db, p, user_id=1)
+            ensure_daily_stock(db, p, user_id=current_user.id)  # 🔥 FIX USER
 
     db.commit()
     return products

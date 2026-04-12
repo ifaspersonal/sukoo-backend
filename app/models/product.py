@@ -19,3 +19,4 @@ class Product(Base, TimestampMixin):
 
     is_unlimited = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    branch_id = Column(Integer, nullable=True)

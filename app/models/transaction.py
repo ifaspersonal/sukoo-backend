@@ -24,6 +24,7 @@ class Transaction(Base, TimestampMixin):
 
     # user yang buat transaksi
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    branch_id = Column(Integer, nullable=True)
 
     # ==============================
     # RELATIONSHIPS

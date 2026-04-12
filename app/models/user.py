@@ -9,3 +9,4 @@ class User(Base, TimestampMixin):
     password = Column(String, nullable=False)
     role = Column(String, default="kasir")  # kasir | supervisor | owner
     is_active = Column(Boolean, default=True)
+    branch_id = Column(Integer, nullable=True)
