@@ -174,11 +174,12 @@ def report_summary(
     # ==============================
     total_points_earned = (
         db.query(func.sum(PointHistory.points))
+        .join(Transaction, Transaction.id == PointHistory.transaction_id)
         .filter(
             PointHistory.type == "earn",
-            func.date(PointHistory.created_at) >= start_date,
-            func.date(PointHistory.created_at) <= end_date,
-            *base_filter,  # 🔥 pakai ini
+            func.date(Transaction.created_at) >= start_date,
+            func.date(Transaction.created_at) <= end_date,
+            *([Transaction.branch_id == branch_id] if branch_id else []),
         )
         .scalar()
         or 0
@@ -186,11 +187,12 @@ def report_summary(
 
     total_points_redeemed = (
         db.query(func.sum(PointHistory.points))
+        .join(Transaction, Transaction.id == PointHistory.transaction_id)
         .filter(
             PointHistory.type == "redeem",
-            func.date(PointHistory.created_at) >= start_date,
-            func.date(PointHistory.created_at) <= end_date,
-            *base_filter,  # 🔥 pakai ini
+            func.date(Transaction.created_at) >= start_date,
+            func.date(Transaction.created_at) <= end_date,
+            *([Transaction.branch_id == branch_id] if branch_id else []),
         )
         .scalar()
         or 0
