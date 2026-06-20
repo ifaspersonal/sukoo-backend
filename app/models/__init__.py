@@ -5,3 +5,4 @@ from app.models.transaction import Transaction
 from app.models.transaction_item import TransactionItem
 from app.models.stock_movement import StockMovement
 from app.models.point_history import PointHistory
+from app.models.branch import Branch
