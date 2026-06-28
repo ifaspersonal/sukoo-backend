@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, users, products, transactions, stocks, print, reports, customers, materials
+from app.db.feature_schema import ensure_feature_tables
 
 app = FastAPI(
     title="SUKOO POS API",
@@ -29,6 +30,10 @@ app.include_router(print.router)
 app.include_router(reports.router)
 app.include_router(customers.router)
 app.include_router(materials.router)
+
+@app.on_event("startup")
+def ensure_feature_schema_on_startup():
+    ensure_feature_tables()
 
 @app.get("/")
 def root():
