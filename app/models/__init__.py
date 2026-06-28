@@ -6,3 +6,6 @@ from app.models.transaction_item import TransactionItem
 from app.models.stock_movement import StockMovement
 from app.models.point_history import PointHistory
 from app.models.branch import Branch
+from app.models.material import Material
+from app.models.material_stock_opname import MaterialStockOpname
+from app.models.product_material_recipe import ProductMaterialRecipe
